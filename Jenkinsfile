@@ -30,7 +30,6 @@ pipeline {
 
         // Terraform
         TF_DIR           = 'terraform'
-        TF_WORKSPACE     = 'production'
     }
 
     // ── Options globales ───────────────────────────────────────────────────
