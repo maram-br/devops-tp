@@ -194,13 +194,16 @@ pipeline {
             steps {
                 echo "==> Provisionnement de l'infrastructure avec Terraform..."
                 dir(TF_DIR) {
-                    sh """
-                        terraform init -input=false
-                        terraform workspace select ${TF_WORKSPACE} || terraform workspace new ${TF_WORKSPACE}                        terraform plan \
-                            -var="image_tag=${IMAGE_TAG}" \
-                            -out=tfplan \
-                            -input=false
-                    """
+                        sh """
+                            terraform init -input=false
+
+                            terraform workspace select ${TF_WORKSPACE} || terraform workspace new ${TF_WORKSPACE}
+
+                            terraform plan \
+                                -var="image_tag=${IMAGE_TAG}" \
+                                -out=tfplan \
+                                -input=false
+                        """
                 }
             }
         }
