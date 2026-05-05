@@ -195,10 +195,10 @@ pipeline {
                 echo "==> Provisionnement de l'infrastructure avec Terraform..."
                 dir(TF_DIR) {
                         sh """
+                            unset TF_WORKSPACE
                             terraform init -input=false
-
-                            terraform workspace select ${TF_WORKSPACE} || terraform workspace new ${TF_WORKSPACE}
-
+                            terraform workspace select production || \
+                                terraform workspace new production
                             terraform plan \
                                 -var="image_tag=${IMAGE_TAG}" \
                                 -out=tfplan \
