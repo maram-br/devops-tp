@@ -11,7 +11,7 @@ pipeline {
     // ── Variables globales ─────────────────────────────────────────────────
     environment {
         // Docker Hub
-        DOCKERHUB_USER   = 'votre-dockerhub-user'           // ← à adapter
+        DOCKERHUB_USER   = 'marambr'           // ← à adapter
         IMAGE_NAME       = "${DOCKERHUB_USER}/flask-devops-app"
         IMAGE_TAG        = "${BUILD_NUMBER}"
         IMAGE_FULL       = "${IMAGE_NAME}:${IMAGE_TAG}"
@@ -131,7 +131,7 @@ pipeline {
         //  EXERCICE 2 — Livraison Continue : Docker + Trivy + Push
         // ══════════════════════════════════════════════════════════════════
 
-        stage('🐳 Docker Build') {
+       /* stage('🐳 Docker Build') {
             steps {
                 echo "==> Construction de l'image Docker : ${IMAGE_FULL}"
                 sh """
@@ -306,6 +306,6 @@ pipeline {
         always {
             // Nettoyage du workspace Jenkins
             cleanWs(cleanWhenSuccess: false)
-        }
+        }*/
     }
 }
