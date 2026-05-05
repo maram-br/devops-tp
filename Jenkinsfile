@@ -30,6 +30,7 @@ pipeline {
 
         // Terraform
         TF_DIR           = 'terraform'
+        TF_WORKSPACE = 'production'
     }
 
     // ── Options globales ───────────────────────────────────────────────────
@@ -51,6 +52,7 @@ pipeline {
                 echo "==> Récupération du code source depuis Git..."
                 checkout scm
                 sh 'git log --oneline -5'
+                sh 'mkdir -p reports'
             }
         }
 
@@ -149,12 +151,12 @@ pipeline {
         stage('🛡️ Security Scan (Trivy)') {
             steps {
                 echo "==> Scan de vulnérabilités avec Trivy sur ${IMAGE_FULL}..."
-                sh '''
+                sh """
                     trivy image --severity HIGH,CRITICAL --exit-code 0 \
                     --format json \
                     --output reports/trivy-report.json \
-                    marambr/flask-devops-app:8
-                '''
+                    ${IMAGE_FULL}
+                """
             }
             post {
                 always {
@@ -194,9 +196,7 @@ pipeline {
                 dir(TF_DIR) {
                     sh """
                         terraform init -input=false
-                        terraform workspace select ${TF_WORKSPACE} || \
-                            terraform workspace new ${TF_WORKSPACE}
-                        terraform plan \
+                        terraform workspace select ${TF_WORKSPACE} || terraform workspace new ${TF_WORKSPACE}                        terraform plan \
                             -var="image_tag=${IMAGE_TAG}" \
                             -out=tfplan \
                             -input=false
