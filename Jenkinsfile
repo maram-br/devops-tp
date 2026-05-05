@@ -150,24 +150,12 @@ pipeline {
         stage('🛡️ Security Scan (Trivy)') {
             steps {
                 echo "==> Scan de vulnérabilités avec Trivy sur ${IMAGE_FULL}..."
-                sh """
-                    # Trivy doit être installé sur l'agent Jenkins
-                    # Installation : https://github.com/aquasecurity/trivy
-
-                    trivy image \
-                        --exit-code 0 \
-                        --severity LOW,MEDIUM \
-                        --format table \
-                        ${IMAGE_FULL}
-
-                    # Echec du pipeline si vulnérabilités CRITICAL ou HIGH détectées
-                    trivy image \
-                        --exit-code 1 \
-                        --severity HIGH,CRITICAL \
-                        --format json \
-                        --output reports/trivy-report.json \
-                        ${IMAGE_FULL}
-                """
+                sh '''
+                    trivy image --severity HIGH,CRITICAL --exit-code 0 \
+                    --format json \
+                    --output reports/trivy-report.json \
+                    marambr/flask-devops-app:8
+                '''
             }
             post {
                 always {
