@@ -1,0 +1,122 @@
+---
+# ConfigMap contenant le dashboard Grafana personnalisé pour flask-devops-app
+# Appliqué via : kubectl apply -f monitoring/grafana-dashboard.yaml -n monitoring
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flask-app-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  flask-devops-app.json: |
+    {
+      "title": "Flask DevOps App — Dashboard",
+      "uid": "flask-devops-tp",
+      "schemaVersion": 36,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "tags": ["devops", "flask", "kubernetes"],
+      "panels": [
+        {
+          "id": 1,
+          "title": "🟢 Pods Running",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+          "targets": [{
+            "expr": "count(kube_pod_status_phase{namespace='devops-tp', phase='Running'})",
+            "legendFormat": "Pods actifs"
+          }],
+          "options": {
+            "colorMode": "background",
+            "thresholds": {
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 1, "color": "green" }
+              ]
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "🔄 Pod Restarts (1h)",
+          "type": "stat",
+          "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+          "targets": [{
+            "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace='devops-tp'}[1h]))",
+            "legendFormat": "Restarts"
+          }],
+          "options": {
+            "colorMode": "background",
+            "thresholds": {
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 3, "color": "yellow" },
+                { "value": 5, "color": "red" }
+              ]
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "📡 Trafic entrant (req/s)",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+          "targets": [{
+            "expr": "rate(app_request_count_total{namespace='devops-tp'}[5m])",
+            "legendFormat": "{{endpoint}} [{{status}}]"
+          }]
+        },
+        {
+          "id": 4,
+          "title": "⚡ CPU Usage par Pod",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+          "targets": [{
+            "expr": "rate(container_cpu_usage_seconds_total{namespace='devops-tp', container='flask-devops-app'}[5m])",
+            "legendFormat": "{{pod}}"
+          }]
+        },
+        {
+          "id": 5,
+          "title": "🧠 RAM Usage par Pod",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+          "targets": [{
+            "expr": "container_memory_working_set_bytes{namespace='devops-tp', container='flask-devops-app'}",
+            "legendFormat": "{{pod}}"
+          }]
+        },
+        {
+          "id": 6,
+          "title": "⏱️ Latence (p99)",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+          "targets": [{
+            "expr": "histogram_quantile(0.99, rate(app_request_latency_seconds_bucket{namespace='devops-tp'}[5m]))",
+            "legendFormat": "p99 — {{endpoint}}"
+          }]
+        }
+      ]
+    }
+---
+# ServiceMonitor — Prometheus scrape config pour flask-devops-app
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: flask-devops-app
+  namespace: monitoring
+  labels:
+    release: kube-prom-stack
+spec:
+  selector:
+    matchLabels:
+      app: flask-devops-app
+  namespaceSelector:
+    matchNames:
+      - devops-tp
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

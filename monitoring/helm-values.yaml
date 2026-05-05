@@ -1,0 +1,166 @@
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  EXERCICE 4 — Stack Monitoring : kube-prometheus-stack                  ║
+# ║  Installation via Helm                                                  ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+#
+# Commandes d'installation :
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm repo update
+#   kubectl create namespace monitoring
+#   helm install kube-prom-stack prometheus-community/kube-prometheus-stack \
+#       --namespace monitoring \
+#       -f monitoring/helm-values.yaml
+
+# ── Grafana ────────────────────────────────────────────────────────────────
+grafana:
+  enabled: true
+  adminPassword: "DevOps-TP-2024!"  # ← changer en prod
+
+  # Ingress Grafana
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.local
+    paths:
+      - /
+
+  # Dashboard custom pré-chargé (ConfigMap)
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'devops-tp'
+          orgId: 1
+          folder: 'DevOps TP'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/devops-tp
+
+  dashboardsConfigMaps:
+    devops-tp: "flask-app-dashboard"
+
+  # DataSource Prometheus (auto-configuré)
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://kube-prom-stack-kube-prome-prometheus:9090
+          isDefault: true
+
+# ── Prometheus ─────────────────────────────────────────────────────────────
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+    # Scraper tous les PodMonitor et ServiceMonitor du cluster
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+
+    # Règles d'alerting additionnelles
+    additionalRuleGroups:
+      - name: flask-devops-app.rules
+        rules:
+          # Alerte si le service est DOWN > 2 minutes
+          - alert: FlaskAppDown
+            expr: up{job="flask-devops-app"} == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Flask DevOps App est DOWN"
+              description: >
+                Le service flask-devops-app est inaccessible depuis plus de 2 minutes.
+                Pods affectés : {{ $labels.pod }}
+
+          # Alerte si CPU > 80%
+          - alert: HighCpuUsage
+            expr: |
+              rate(container_cpu_usage_seconds_total{namespace="devops-tp"}[5m]) > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "CPU élevé sur flask-devops-app"
+              description: "CPU > 80% depuis 5 minutes sur {{ $labels.pod }}"
+
+          # Alerte redémarrages excessifs
+          - alert: PodRestartingTooOften
+            expr: |
+              increase(kube_pod_container_status_restarts_total{namespace="devops-tp"}[1h]) > 5
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} redémarre trop souvent"
+
+# ── AlertManager ──────────────────────────────────────────────────────────
+alertmanager:
+  enabled: true
+
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+
+  config:
+    global:
+      resolve_timeout: 5m
+      # Configurer SMTP pour les notifications mail
+      smtp_smarthost: 'smtp.gmail.com:587'
+      smtp_from: 'alertmanager@devops-tp.local'
+      smtp_auth_username: 'votre-email@gmail.com'
+      smtp_auth_password: 'votre-app-password'
+
+    route:
+      group_by: ['alertname', 'namespace']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      receiver: 'devops-team'
+      routes:
+        - match:
+            severity: critical
+          receiver: 'devops-team-critical'
+
+    receivers:
+      - name: 'devops-team'
+        email_configs:
+          - to: 'devops-team@exemple.com'
+            send_resolved: true
+            headers:
+              Subject: '[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
+        # Alternative : webhook vers Slack, Teams, etc.
+        # webhook_configs:
+        #   - url: 'https://hooks.slack.com/services/VOTRE/WEBHOOK/URL'
+
+      - name: 'devops-team-critical'
+        email_configs:
+          - to: 'devops-lead@exemple.com'
+            send_resolved: true
+
+# ── Composants désactivés (optionnel selon l'env) ─────────────────────────
+kubeEtcd:
+  enabled: false   # Non accessible dans Kind par défaut
+
+kubeScheduler:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false

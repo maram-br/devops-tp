@@ -1,0 +1,96 @@
+---
+# K8s Deployment — flask-devops-app
+# Utilisé directement (sans Ansible) ou via Ansible comme référence
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-devops-app
+  namespace: devops-tp
+  labels:
+    app: flask-devops-app
+    managed-by: jenkins
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flask-devops-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: flask-devops-app
+      annotations:
+        # Permet à Prometheus de scraper automatiquement ce pod
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: flask-devops-app
+          image: votre-dockerhub-user/flask-devops-app:BUILD_NUMBER  # remplacé par Jenkins
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-devops-app
+  namespace: devops-tp
+  labels:
+    app: flask-devops-app
+spec:
+  selector:
+    app: flask-devops-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5000
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: flask-devops-app
+  namespace: devops-tp
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: flask-devops-app.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: flask-devops-app
+                port:
+                  number: 80

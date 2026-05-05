@@ -1,0 +1,182 @@
+---
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  Ansible Playbook — Configuration K8s & Déploiement de l'application   ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+#
+# Usage :
+#   ansible-playbook playbook-deploy.yml \
+#     -e image_tag=42 \
+#     -e image_name=monuser/flask-devops-app \
+#     -e k8s_namespace=devops-tp \
+#     -e kubeconfig=/path/to/kubeconfig
+
+- name: "Déploiement Flask DevOps App sur Kubernetes"
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    image_tag: "latest"
+    image_name: "votre-dockerhub-user/flask-devops-app"
+    k8s_namespace: "devops-tp"
+    kubeconfig: "~/.kube/config"
+    app_replicas: 2
+    app_port: 5000
+    resource_requests_cpu: "100m"
+    resource_requests_mem: "128Mi"
+    resource_limits_cpu: "500m"
+    resource_limits_mem: "256Mi"
+
+  tasks:
+
+    # ── 1. Vérification de la connectivité au cluster ──────────────────────
+    - name: Vérification de la connexion au cluster K8s
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig }}"
+        kind: Node
+      register: nodes_info
+
+    - name: Affichage des nœuds disponibles
+      debug:
+        msg: "Nœuds K8s : {{ nodes_info.resources | map(attribute='metadata.name') | list }}"
+
+    # ── 2. Création du Namespace ───────────────────────────────────────────
+    - name: Création du namespace applicatif
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ k8s_namespace }}"
+            labels:
+              managed-by: ansible
+              app: flask-devops
+
+    # ── 3. Déploiement de l'application ───────────────────────────────────
+    - name: Déploiement Kubernetes (Deployment)
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: flask-devops-app
+            namespace: "{{ k8s_namespace }}"
+            labels:
+              app: flask-devops-app
+              version: "{{ image_tag }}"
+          spec:
+            replicas: "{{ app_replicas }}"
+            selector:
+              matchLabels:
+                app: flask-devops-app
+            strategy:
+              type: RollingUpdate
+              rollingUpdate:
+                maxSurge: 1
+                maxUnavailable: 0
+            template:
+              metadata:
+                labels:
+                  app: flask-devops-app
+                  version: "{{ image_tag }}"
+                annotations:
+                  prometheus.io/scrape: "true"
+                  prometheus.io/port: "{{ app_port }}"
+                  prometheus.io/path: "/metrics"
+              spec:
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                containers:
+                  - name: flask-devops-app
+                    image: "{{ image_name }}:{{ image_tag }}"
+                    imagePullPolicy: Always
+                    ports:
+                      - containerPort: "{{ app_port }}"
+                        protocol: TCP
+                    resources:
+                      requests:
+                        cpu: "{{ resource_requests_cpu }}"
+                        memory: "{{ resource_requests_mem }}"
+                      limits:
+                        cpu: "{{ resource_limits_cpu }}"
+                        memory: "{{ resource_limits_mem }}"
+                    livenessProbe:
+                      httpGet:
+                        path: /health
+                        port: "{{ app_port }}"
+                      initialDelaySeconds: 10
+                      periodSeconds: 15
+                      failureThreshold: 3
+                    readinessProbe:
+                      httpGet:
+                        path: /health
+                        port: "{{ app_port }}"
+                      initialDelaySeconds: 5
+                      periodSeconds: 10
+
+    # ── 4. Service K8s ────────────────────────────────────────────────────
+    - name: Création du Service K8s
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: flask-devops-app
+            namespace: "{{ k8s_namespace }}"
+            labels:
+              app: flask-devops-app
+          spec:
+            selector:
+              app: flask-devops-app
+            ports:
+              - protocol: TCP
+                port: 80
+                targetPort: "{{ app_port }}"
+            type: ClusterIP
+
+    # ── 5. Ingress ────────────────────────────────────────────────────────
+    - name: Création de l'Ingress
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: flask-devops-app
+            namespace: "{{ k8s_namespace }}"
+            annotations:
+              nginx.ingress.kubernetes.io/rewrite-target: /
+          spec:
+            ingressClassName: nginx
+            rules:
+              - host: flask-devops-app.local
+                http:
+                  paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: flask-devops-app
+                          port:
+                            number: 80
+
+    # ── 6. Attendre que le déploiement soit Ready ─────────────────────────
+    - name: Attente du rollout
+      command: >
+        kubectl rollout status deployment/flask-devops-app
+        -n {{ k8s_namespace }}
+        --timeout=3m
+      environment:
+        KUBECONFIG: "{{ kubeconfig }}"
+
+    - name: "✅ Déploiement terminé avec succès !"
+      debug:
+        msg: "Image {{ image_name }}:{{ image_tag }} déployée dans le namespace {{ k8s_namespace }}"

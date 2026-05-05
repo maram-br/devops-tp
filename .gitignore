@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+*.egg-info/
+
+# Tests & Coverage
+reports/
+.coverage
+htmlcov/
+
+# Terraform
+terraform/.terraform/
+terraform/tfplan
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+
+# Docker
+*.tar
+
+# Jenkins
+.jenkinsfile.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
