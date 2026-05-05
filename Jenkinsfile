@@ -209,22 +209,16 @@ pipeline {
         }
 
         stage('🏗️ Terraform Apply') {
-            // Approbation manuelle avant d'appliquer en production
-            input {
-                message "Appliquer le plan Terraform ?"
-                ok "Oui, provisionner"
-            }
             steps {
                 dir(TF_DIR) {
                     sh 'terraform apply -input=false -auto-approve tfplan'
-                    // Récupère l'output Terraform (ex: kubeconfig, IP...)
                     sh 'terraform output -json > ../reports/terraform-outputs.json'
                 }
             }
             post {
                 always {
                     archiveArtifacts artifacts: 'reports/terraform-outputs.json',
-                                     allowEmptyArchive: true
+                                    allowEmptyArchive: true
                 }
             }
         }
