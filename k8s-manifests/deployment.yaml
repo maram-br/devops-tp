@@ -34,7 +34,7 @@ spec:
         runAsUser: 1000
       containers:
         - name: flask-devops-app
-          image: votre-dockerhub-user/flask-devops-app:BUILD_NUMBER  # remplacé par Jenkins
+          image: maram-br/flask-devops-app:1
           imagePullPolicy: Always
           ports:
             - containerPort: 5000
