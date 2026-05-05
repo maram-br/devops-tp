@@ -131,7 +131,7 @@ pipeline {
         //  EXERCICE 2 — Livraison Continue : Docker + Trivy + Push
         // ══════════════════════════════════════════════════════════════════
 
-       /* stage('🐳 Docker Build') {
+       stage('🐳 Docker Build') {
             steps {
                 echo "==> Construction de l'image Docker : ${IMAGE_FULL}"
                 sh """
@@ -201,7 +201,7 @@ pipeline {
         //  EXERCICE 3 — Déploiement IaC : Terraform + Ansible + K8s
         // ══════════════════════════════════════════════════════════════════
 
-        stage('🏗️ Terraform Init & Plan') {
+        /*stage('🏗️ Terraform Init & Plan') {
             steps {
                 echo "==> Provisionnement de l'infrastructure avec Terraform..."
                 dir(TF_DIR) {
