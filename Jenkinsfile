@@ -190,81 +190,52 @@ pipeline {
         //  EXERCICE 3 — Déploiement IaC : Terraform + Ansible + K8s
         // ══════════════════════════════════════════════════════════════════
 
-        stage('🏗️ Terraform Init & Plan') {
+        stage('Terraform - Infrastructure') {
             steps {
-                echo "==> Provisionnement de l'infrastructure avec Terraform..."
-                dir(TF_DIR) {
-                        sh """
-                            unset TF_WORKSPACE
-                            terraform init -input=false
-                            terraform workspace select production || \
-                                terraform workspace new production
-                            terraform plan \
-                                -var="image_tag=${IMAGE_TAG}" \
-                                -out=tfplan \
-                                -input=false
-                        """
-                }
-            }
-        }
-
-        stage('🏗️ Terraform Apply') {
-            steps {
-                dir(TF_DIR) {
-                    sh 'terraform apply -input=false -auto-approve tfplan'
-                    sh 'terraform output -json > ../reports/terraform-outputs.json'
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'reports/terraform-outputs.json',
-                                    allowEmptyArchive: true
-                }
-            }
-        }
-
-        stage('⚙️ Ansible — Configure & Deploy') {
-            steps {
-                echo "==> Configuration K8s et déploiement via Ansible..."
-                withCredentials([file(
-                    credentialsId: KUBECONFIG_CREDS,
-                    variable: 'KUBECONFIG_FILE'
-                )]) {
+                echo "==> Provisionnement infrastructure Terraform..."
+                dir('terraform') {
                     sh """
-                        export KUBECONFIG=${KUBECONFIG_FILE}
-
-                        ansible-playbook ansible/playbook-deploy.yml \
-                            -e image_tag=${IMAGE_TAG} \
-                            -e image_name=${IMAGE_NAME} \
-                            -e k8s_namespace=${K8S_NAMESPACE} \
-                            -e kubeconfig=${KUBECONFIG_FILE} \
-                            -v
+                        unset TF_WORKSPACE
+                        terraform init -input=false
+                        terraform workspace select production || \
+                            terraform workspace new production
+                        terraform plan -var="image_tag=${IMAGE_TAG}" -out=tfplan -input=false
+                        terraform apply -input=false -auto-approve tfplan
                     """
                 }
             }
         }
 
-        stage('🔬 Smoke Test') {
-            steps {
-                echo "==> Vérification de l'accessibilité de l'application..."
-                sh """
-                    # Attendre que le déploiement soit prêt (max 3 min)
-                    kubectl rollout status deployment/flask-devops-app \
-                        -n ${K8S_NAMESPACE} \
-                        --timeout=3m
 
-                    # Test HTTP de l'endpoint de santé
+        stage('K8s Deploy (Ansible)') {
+            steps {
+                echo "==> Déploiement Kubernetes via Ansible..."
+                sh """
+                    ansible-playbook ansible/playbook-deploy.yml \
+                        -e image_tag=latest \
+                        -e image_name=${IMAGE_NAME} \
+                        -e k8s_namespace=${K8S_NAMESPACE} \
+                        -v
+                """
+            }
+        }
+
+        stage('Smoke Test') {
+            steps {
+                echo "==> Smoke Test..."
+                sh """
+                    kubectl rollout status deployment/flask-devops-app \
+                        -n ${K8S_NAMESPACE} --timeout=3m
+
                     for i in 1 2 3 4 5; do
-                        HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' ${APP_URL}/health)
-                        echo "Tentative \$i — HTTP Status: \$HTTP_CODE"
+                        HTTP_CODE=\$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8888/health)
+                        echo "Tentative \$i - HTTP: \$HTTP_CODE"
                         if [ "\$HTTP_CODE" = "200" ]; then
-                            echo "✅ Smoke Test réussi ! Application accessible."
+                            echo "Smoke Test OK"
                             exit 0
                         fi
                         sleep 10
                     done
-
-                    echo "❌ Smoke Test échoué après 5 tentatives."
                     exit 1
                 """
             }
