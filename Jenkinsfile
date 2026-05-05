@@ -189,7 +189,7 @@ pipeline {
         //  EXERCICE 3 — Déploiement IaC : Terraform + Ansible + K8s
         // ══════════════════════════════════════════════════════════════════
 
-        /*stage('🏗️ Terraform Init & Plan') {
+        stage('🏗️ Terraform Init & Plan') {
             steps {
                 echo "==> Provisionnement de l'infrastructure avec Terraform..."
                 dir(TF_DIR) {
@@ -294,6 +294,6 @@ pipeline {
         always {
             // Nettoyage du workspace Jenkins
             cleanWs(cleanWhenSuccess: false)
-        }*/
+        }
     }
 }
